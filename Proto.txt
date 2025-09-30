@@ -1,0 +1,209 @@
+Pular para o conteúdo
+Histórico de chats
+
+Faça upgrade do seu plano
+Você disse:
+Massa! Você quer montar um protótipo com o **ESP32** para medir **corrente elétrica** usando o **SCT-013 (100A:50mA)** e também medir **vibração** usando o **ADXL345** (acelerômetro). Show, vamos organizar o projeto!
+
+---
+
+## 🔎 Objetivos do protótipo:
+
+* Medir corrente AC da rede elétrica com o SCT-013
+* Medir vibração (aceleração) com ADXL345
+* Processar e enviar dados com o ESP32 (via Serial, Wi-Fi, MQTT, etc)
+
+---
+
+# 1️⃣ Sensor de corrente SCT-013 (100A:50mA)
+
+### Resumo:
+
+* SCT-013 saída em corrente (50mA no máximo)
+* Precisa de resistor de carga (burden resistor) para converter corrente em tensão
+* Usar divisor de tensão e ponto médio (bias) para leitura segura no ESP32 (ADC 0-3.3V)
+
+### Circuito para SCT-013
+
+* Resistor burden: ~62Ω (calibrar)
+* Divisor com 2 resistores de 10k para criar bias em 1.65V
+* Conectar à entrada analógica do ESP32 (GPIO34 ou similar)
+
+---
+
+# 2️⃣ Sensor de vibração ADXL345
+
+### Resumo:
+
+* Acelerômetro 3 eixos
+* Comunicação I2C (pinos SDA e SCL do ESP32)
+* Alimentação 3.3V (compatível com ESP32)
+* Biblioteca Arduino pronta (ex: Adafruit_ADXL345)
+
+### Conexão típica:
+
+| ADXL345 Pin | ESP32 Pin |
+| ----------- | --------- |
+| VCC         | 3.3V      |
+| GND         | GND       |
+| SDA         | GPIO21    |
+| SCL         | GPIO22    |
+
+---
+
+# 3️⃣ Código básico (integração)
+
+Vou te dar um código exemplo que lê corrente e aceleração.
+
+cpp
+#include <Wire.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_ADXL345_U.h>
+
+// Pino do sensor de corrente
+const int currentSensorPin = 34;
+const int nSamples = 500;
+const float Vref = 1.65;   // Tensão de bias (metade de 3.3V)
+const float burdenResistor = 62.0; // Ohms
+const float calibration = 60.6;    // Ajustar conforme seu resistor e sensor
+
+Adafruit_ADXL345_Unified accel = Adafruit_ADXL345_Unified(12345);
+
+void setup() {
+  Serial.begin(115200);
+  Wire.begin();
+
+  // Inicializa ADXL345
+  if (!accel.begin()) {
+    Serial.println("Erro ao iniciar ADXL345");
+    while (1);
+  }
+
+  accel.setRange(ADXL345_RANGE_16_G);
+  Serial.println("Sensor ADXL345 iniciado");
+}
+
+void loop() {
+  // Leitura corrente AC (RMS)
+  float sum = 0;
+  for (int i = 0; i < nSamples; i++) {
+    int raw = analogRead(currentSensorPin);
+    float voltage = (raw / 4095.0) * 3.3;
+    float centered = voltage - Vref;
+    sum += centered * centered;
+  }
+  float voltageRMS = sqrt(sum / nSamples);
+  float current = voltageRMS * calibration;
+
+  Serial.print("Corrente RMS: ");
+  Serial.print(current);
+  Serial.println(" A");
+
+  // Leitura do acelerômetro
+  sensors_event_t event; 
+  accel.getEvent(&event);
+
+  Serial.print("Accel X: "); Serial.print(event.acceleration.x); Serial.print(" m/s^2, ");
+  Serial.print("Y: "); Serial.print(event.acceleration.y); Serial.print(" m/s^2, ");
+  Serial.print("Z: "); Serial.print(event.acceleration.z); Serial.println(" m/s^2");
+
+  delay(1000);
+}
+
+
+---
+
+# 4️⃣ Dicas para montagem física
+
+* Sensor SCT-013: coloque o **burden resistor e divisor de tensão** na protoboard.
+* Sensor ADXL345: conecte no barramento I2C do ESP32.
+* Garanta que o sensor SCT-013 esteja abraçando **apenas um condutor** da rede (fase ou neutro).
+* Use cabos blindados ou com ferrite para reduzir ruído.
+
+---
+
+# 5️⃣ Próximos passos legais
+
+* Filtrar os dados do sensor de corrente para remover ruídos (filtro passa-baixa)
+* Calibrar o sensor SCT-013 com um multímetro para melhorar a precisão
+* Salvar dados em cartão SD ou enviar via Wi-Fi para dashboard
+* Processar a vibração para detectar eventos específicos (picos, frequência, etc)
+
+---
+
+Se quiser, posso ajudar com:
+
+* Esquemas elétricos detalhados (com imagens)
+* Explicação de como fazer a calibração exata do SCT-013
+* Código para enviar dados via Wi-Fi (MQTT, HTTP)
+* Processamento de sinais de vibração
+
+Quer seguir com algum desses?
+O ChatGPT disse:
+Boa! 🚀 Você já montou um ótimo esqueleto do projeto — tanto na parte de hardware quanto no código.
+
+Dá pra ir afinando em alguns pontos:
+
+✅ Revisão rápida do que você montou:
+SCT-013
+Burden resistor ~62 Ω → correto (para 50 mA → 3,1 V pico, ainda dentro da faixa do ESP32).
+
+Bias com divisor de 10k/10k → correto, centraliza em ~1,65 V.
+
+Leitura RMS → seu código já implementa, só precisa calibrar com carga conhecida.
+
+ADXL345
+Alimentação e conexões I2C → certinho.
+
+Uso da lib Adafruit → facilita demais.
+
+Range em ±16 g → bom pra vibração forte, mas se quiser mais resolução pode usar ±2 g.
+
+ESP32
+ADC de 12 bits → 0–4095, leitura com analogRead() está correta.
+
+Serial debug → perfeito para validar no início.
+
+🔧 Ajustes que podem melhorar
+Calibração do SCT-013
+O fator calibration = 60.6 vai variar conforme seu resistor real (valor exato medido com multímetro) e a rede (127/220 V).
+👉 O ideal é ligar uma carga conhecida (ex: lâmpada de 100 W = ~0,45 A em 220 V) e ajustar o fator até bater com o multímetro.
+
+Ruído no ADC do ESP32
+O ESP32 às vezes “treme” leituras no ADC. Sugestões:
+
+Sempre usar o mesmo canal ADC1 (GPIO 32–39, já fez isso).
+
+Se possível, usar média de várias janelas (ex: média de 10 RMS consecutivos).
+
+Colocar um capacitor de 100 nF no bias (entre 1,65 V e GND) ajuda a estabilizar.
+
+Filtro digital
+Pra corrente, você pode aplicar um filtro passa-baixa simples ou usar a biblioteca EmonLib (já pronta pra SCT-013).
+
+Vibração (ADXL345)
+
+Pra detecção de eventos, pode calcular a magnitude do vetor:
+
+float mag = sqrt(event.acceleration.x*event.acceleration.x + 
+                 event.acceleration.y*event.acceleration.y + 
+                 event.acceleration.z*event.acceleration.z);
+Assim você mede vibração “geral” sem depender de eixo.
+
+🚀 Próximos passos legais
+📊 Dashboard em tempo real → enviar via MQTT para Node-RED + Grafana.
+
+💾 Log local → salvar em cartão SD ou SPIFFS.
+
+🔍 Análise de vibração → FFT (Fast Fourier Transform) no ESP32 ou enviar dados crus pro PC e analisar no Python.
+
+⚡ Segurança → nunca abrir o SCT-013 e sempre medir apenas um condutor.
+
+👉 Quer que eu desenhe o esquema elétrico com os resistores e conexões (SCT-013 + ADXL345 + ESP32) pra você montar na protoboard?
+
+
+
+
+Nenhum arquivo escolhidoNenhum arquivo escolhido
+O ChatGPT pode cometer erros. Por isso, lembre-se de conferir informações relevantes.
+
